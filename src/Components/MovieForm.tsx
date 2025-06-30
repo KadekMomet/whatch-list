@@ -1,35 +1,16 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { FaTimes, FaSave, FaTrash } from 'react-icons/fa';
-
-// Tambahkan tipe Movie dan MovieFormData
-type Movie = {
-  id?: string;
-  title: string;
-  description: string;
-  poster_url?: string;
-  rating: number;
-  release_year: number;
-  trailer_url?: string;
-  type: string;
-  country: string;
-  genre: string;
-  is_watched: boolean;
-  is_favorite: boolean;
-  watch_later: boolean;
-};
-
-type MovieFormData = Omit<Movie, 'id'>;
-
-type MovieFormErrors = Partial<Record<keyof MovieFormData, string>>;
+import { Genre, MovieFormData, MovieFormErrors } from '@/lib/types'; // pastikan path sesuai
 
 interface MovieFormProps {
-  movie: Movie | null;
+  movie: MovieFormData | null;
+  genres: Genre[];
   onClose: () => void;
   onSave: (movieData: MovieFormData) => void;
 }
 
-const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
+const MovieForm = ({ movie, genres, onClose, onSave }: MovieFormProps) => {
   const [formData, setFormData] = useState<MovieFormData>({
     title: '',
     description: '',
@@ -39,10 +20,10 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
     trailer_url: '',
     type: 'movie',
     country: '',
-    genre: '',
     is_watched: false,
     is_favorite: false,
-    watch_later: false
+    watch_later: false,
+    genres: []
   });
 
   const [errors, setErrors] = useState<MovieFormErrors>({});
@@ -50,18 +31,18 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
   useEffect(() => {
     if (movie) {
       setFormData({
-        title: movie.title || '',
-        description: movie.description || '',
+        title: movie.title,
+        description: movie.description,
         poster_url: movie.poster_url || '',
-        rating: movie.rating || 0,
-        release_year: movie.release_year || new Date().getFullYear(),
+        rating: movie.rating,
+        release_year: movie.release_year,
         trailer_url: movie.trailer_url || '',
-        type: movie.type || 'movie',
-        country: movie.country || '',
-        genre: movie.genre || '',
-        is_watched: movie.is_watched || false,
-        is_favorite: movie.is_favorite || false,
-        watch_later: movie.watch_later || false
+        type: movie.type,
+        country: movie.country,
+        is_watched: movie.is_watched,
+        is_favorite: movie.is_favorite,
+        watch_later: movie.watch_later,
+        genres: movie.genres
       });
     }
   }, [movie]);
@@ -78,7 +59,6 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
           : value
     });
 
-    // Clear error when field is changed
     if (errors[name]) {
       setErrors({
         ...errors,
@@ -87,28 +67,36 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
     }
   };
 
-  const handleToggle = (field: string) => {
+  const handleGenreChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const options = Array.from(e.target.selectedOptions, option => option.value);
     setFormData({
       ...formData,
-      [field]: !formData[field as keyof typeof formData]
+      genres: options
+    });
+  };
+
+  const handleToggle = (field: keyof MovieFormData) => {
+    setFormData({
+      ...formData,
+      [field]: !formData[field]
     });
   };
 
   const validate = () => {
     const newErrors: MovieFormErrors = {};
-    
+
     if (!formData.title) newErrors.title = 'Judul wajib diisi';
     if (!formData.release_year) newErrors.release_year = 'Tahun rilis wajib diisi';
     if (!formData.country) newErrors.country = 'Negara wajib diisi';
-    if (!formData.genre) newErrors.genre = 'Genre wajib diisi';
-    
+    if (formData.genres.length === 0) newErrors.genres = 'Pilih minimal satu genre';
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (validate()) {
       onSave(formData);
     }
@@ -138,11 +126,12 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
             <FaTimes size={20} />
           </button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left Column */}
+            {/* Kiri */}
             <div>
+              {/* Judul */}
               <div className="mb-4">
                 <label className="block text-gray-300 mb-2">Judul</label>
                 <input
@@ -157,24 +146,23 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
                 />
                 {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title}</p>}
               </div>
-              
-              {/* <div className="mb-4">
+
+              {/* Deskripsi */}
+              <div className="mb-4">
                 <label className="block text-gray-300 mb-2">Deskripsi</label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
                   rows={4}
-                  className={`w-full bg-gray-800 text-light rounded-lg px-4 py-2 focus:outline-none focus:ring-2 ${
-                    errors.description ? 'focus:ring-red-500 border border-red-500' : 'focus:ring-primary'
-                  }`}
+                  className="w-full bg-gray-800 text-light rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="Deskripsi film"
                 ></textarea>
-                {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
-              </div> */}
-              
+              </div>
+
+              {/* Tahun & Rating */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="mb-4">
+                <div className ="mb-4">
                   <label className="block text-gray-300 mb-2">Tahun Rilis</label>
                   <input
                     type="number"
@@ -189,7 +177,7 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
                   />
                   {errors.release_year && <p className="text-red-500 text-sm mt-1">{errors.release_year}</p>}
                 </div>
-                
+
                 <div className="mb-4">
                   <label className="block text-gray-300 mb-2">Rating (0-10)</label>
                   <input
@@ -199,15 +187,16 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
                     onChange={handleChange}
                     min="0"
                     max="10"
-                    // step="0.1"
+                    step="0.1"
                     className="w-full bg-gray-800 text-light rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               </div>
             </div>
-            
-            {/* Right Column */}
+
+            {/* Kanan */}
             <div>
+              {/* Poster URL */}
               <div className="mb-4">
                 <label className="block text-gray-300 mb-2">URL Poster (Opsional)</label>
                 <input
@@ -219,7 +208,8 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
                   placeholder="https://example.com/poster.jpg"
                 />
               </div>
-              
+
+              {/* Trailer URL */}
               <div className="mb-4">
                 <label className="block text-gray-300 mb-2">URL Trailer YouTube (Opsional)</label>
                 <input
@@ -231,7 +221,8 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
                   placeholder="https://youtube.com/watch?v=..."
                 />
               </div>
-              
+
+              {/* Type & Country */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="mb-4">
                   <label className="block text-gray-300 mb-2">Tipe</label>
@@ -245,7 +236,7 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
                     <option value="series">Series</option>
                   </select>
                 </div>
-                
+
                 <div className="mb-4">
                   <label className="block text-gray-300 mb-2">Negara</label>
                   <input
@@ -261,72 +252,55 @@ const MovieForm = ({ movie, onClose, onSave }: MovieFormProps) => {
                   {errors.country && <p className="text-red-500 text-sm mt-1">{errors.country}</p>}
                 </div>
               </div>
-              
+
+              {/* Genres */}
               <div className="mb-4">
                 <label className="block text-gray-300 mb-2">Genre</label>
-                <input
-                  type="text"
-                  name="genre"
-                  value={formData.genre}
-                  onChange={handleChange}
-                  className={`w-full bg-gray-800 text-light rounded-lg px-4 py-2 focus:outline-none focus:ring-2 ${
-                    errors.genre ? 'focus:ring-red-500 border border-red-500' : 'focus:ring-primary'
+                <select
+                  multiple
+                  value={formData.genres}
+                  onChange={handleGenreChange}
+                  className={`w-full bg-gray-800 text-light rounded-lg px-4 py-2 focus:outline-none focus:ring-2 h-auto min-h-[42px] ${
+                    errors.genres ? 'focus:ring-red-500 border border-red-500' : 'focus:ring-primary'
                   }`}
-                  placeholder="Genre film"
-                />
-                {errors.genre && <p className="text-red-500 text-sm mt-1">{errors.genre}</p>}
+                >
+                  {genres.map(genre => (
+                    <option key={genre.id} value={genre.id}>
+                      {genre.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.genres && <p className="text-red-500 text-sm mt-1">{errors.genres}</p>}
+                <p className="text-gray-400 text-xs mt-1">Gunakan Ctrl/Cmd untuk memilih multiple genre</p>
               </div>
-              
+
+              {/* Checkboxes */}
               <div className="flex space-x-4 mb-4">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_watched"
-                    checked={formData.is_watched}
-                    onChange={() => handleToggle('is_watched')}
-                    className="mr-2 h-5 w-5 text-primary rounded focus:ring-primary"
-                  />
-                  <label htmlFor="is_watched" className="text-gray-300">
-                    Sudah ditonton
-                  </label>
-                </div>
-                
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_favorite"
-                    checked={formData.is_favorite}
-                    onChange={() => handleToggle('is_favorite')}
-                    className="mr-2 h-5 w-5 text-primary rounded focus:ring-primary"
-                  />
-                  <label htmlFor="is_favorite" className="text-gray-300">
-                    Favorit
-                  </label>
-                </div>
-                
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="watch_later"
-                    checked={formData.watch_later}
-                    onChange={() => handleToggle('watch_later')}
-                    className="mr-2 h-5 w-5 text-primary rounded focus:ring-primary"
-                  />
-                  <label htmlFor="watch_later" className="text-gray-300">
-                    Akan ditonton
-                  </label>
-                </div>
+                {['is_watched', 'is_favorite', 'watch_later'].map(field => (
+                  <div className="flex items-center" key={field}>
+                    <input
+                      type="checkbox"
+                      id={field}
+                      checked={formData[field as keyof MovieFormData] as boolean}
+                      onChange={() => handleToggle(field as keyof MovieFormData)}
+                      className="mr-2 h-5 w-5 text-primary rounded focus:ring-primary"
+                    />
+                    <label htmlFor={field} className="text-gray-300 capitalize">
+                      {field.replace(/_/g, ' ')}
+                    </label>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-          
+
           <div className="flex justify-end space-x-4 mt-6 border-t border-gray-800 pt-4">
             {movie && (
               <button
                 type="button"
                 onClick={() => {
                   if (confirm('Apakah Anda yakin ingin menghapus film ini?')) {
-                    onClose();
+                    onClose(); // seharusnya ada `onDelete(movie.id)` kalau ingin hapus
                   }
                 }}
                 className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors"

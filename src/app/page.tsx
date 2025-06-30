@@ -8,53 +8,46 @@ import FilterBar from '@/Components/FilterBar';
 import MovieGrid from '@/Components/MovieGrid';
 import MovieForm from '@/Components/MovieForm';
 import TrailerModal from '@/Components/TrailerModal';
-
-// Tambahkan interface untuk Movie dan Category
-type Movie = {
-  id: string;
-  title: string;
-  description: string;
-  country: string;
-  release_year: number;
-  genre: string;
-  type: string;
-  rating: number;
-  is_favorite: boolean;
-  is_watched: boolean;
-  watch_later: boolean;
-  trailer_url?: string;
-  // tambahkan field lain sesuai kebutuhan
-};
-
-type Category = {
-  id: string;
-  name: string;
-  type: string;
-};
+import { Movie, Category, Genre, FilterState, MovieFormData } from '@/lib/types';
 
 export default function Home() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [filteredMovies, setFilteredMovies] = useState<Movie[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
   const [selectedTrailer, setSelectedTrailer] = useState<string | null>(null);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<FilterState>({
     search: '',
-    country: '',
-    year: '',
     genre: '',
     type: '',
     sort: 'rating_desc',
+    watchStatus: '', 
   });
 
-  // Fetch movies and categories
   useEffect(() => {
     const fetchMovies = async () => {
-      const { data, error } = await supabase.from('movies').select('*');
+      const { data, error } = await supabase
+        .from('movies')
+        .select(`
+          *,
+          movie_genres (
+            genres (
+              id,
+              name
+            )
+          )
+        `);
+
       if (!error && data) {
-        setMovies(data);
-        setFilteredMovies(data);
+        const moviesWithGenres: Movie[] = data.map(movie => ({
+          ...movie,
+          genres: movie.movie_genres.map((mg: { genres: Genre }) => mg.genres),
+        }));
+
+        setMovies(moviesWithGenres);
+        setFilteredMovies(moviesWithGenres);
       }
     };
 
@@ -63,54 +56,68 @@ export default function Home() {
       if (!error && data) setCategories(data);
     };
 
+    const fetchGenres = async () => {
+      const { data, error } = await supabase.from('genres').select('*');
+      if (!error && data) setGenres(data);
+    };
+
     fetchMovies();
     fetchCategories();
+    fetchGenres();
   }, []);
 
-  // Apply filters
   useEffect(() => {
     let result = [...movies];
-     
-    // Search filter
+
     if (filters.search) {
-      const searchTerm = filters.search.toLowerCase();
-      result = result.filter(movie => 
-        movie.title.toLowerCase().includes(searchTerm) || 
-        movie.description.toLowerCase().includes(searchTerm)
+      const term = filters.search.toLowerCase();
+      result = result.filter(movie =>
+        movie.title.toLowerCase().includes(term) ||
+        movie.description.toLowerCase().includes(term)
       );
     }
-    
-    // Country filter
-    if (filters.country) {
-      result = result.filter(movie => movie.country === filters.country);
-    }
-    
-    // Year filter
-    if (filters.year) {
-      result = result.filter(movie => movie.release_year === parseInt(filters.year));
-    }
-    
-    // Genre filter
+
+
     if (filters.genre) {
-      result = result.filter(movie => movie.genre === filters.genre);
+      result = result.filter(movie =>
+        movie.genres.some(g => g.id === filters.genre)
+      );
     }
-    
-    // Type filter
+
     if (filters.type) {
       result = result.filter(movie => movie.type === filters.type);
     }
-    
-    // Sorting
-    if (filters.sort === 'rating_desc') {
-      result.sort((a, b) => b.rating - a.rating);
-    } else if (filters.sort === 'rating_asc') {
-      result.sort((a, b) => a.rating - b.rating);
-    } else if (filters.sort === 'year_desc') {
-      result.sort((a, b) => b.release_year - a.release_year);
-    } else if (filters.sort === 'year_asc') {
-      result.sort((a, b) => a.release_year - b.release_year);
+
+    if (filters.watchStatus) {
+      switch (filters.watchStatus) {
+        case 'watched':
+          result = result.filter(movie => movie.is_watched);
+          break;
+        case 'watchLater':
+          result = result.filter(movie => movie.watch_later);
+          break;
+        case 'unwatched':
+          result = result.filter(movie => !movie.is_watched);
+          break;
+      }
     }
-    
+
+
+    switch (filters.sort) {
+      case 'rating_desc':
+        result.sort((a, b) => b.rating - a.rating);
+        break;
+      case 'rating_asc':
+        result.sort((a, b) => a.rating - b.rating);
+        break;
+      case 'year_desc':
+        result.sort((a, b) => b.release_year - a.release_year);
+        break;
+      case 'year_asc':
+        result.sort((a, b) => a.release_year - b.release_year);
+        break;
+    }
+
     setFilteredMovies(result);
   }, [movies, filters]);
 
@@ -143,30 +150,96 @@ export default function Home() {
     }
   };
 
-  const handleSaveMovie = async (movieData: Partial<Movie>) => {
-
+  const handleSaveMovie = async (movieData: MovieFormData): Promise<void> => {
     if (editingMovie) {
-      // Update existing movie
-      const { data, error } = await supabase
+      const { data: updatedMovie, error } = await supabase
         .from('movies')
-        .update(movieData)
+        .update({
+          title: movieData.title,
+          description: movieData.description,
+          poster_url: movieData.poster_url,
+          rating: movieData.rating,
+          release_year: movieData.release_year,
+          trailer_url: movieData.trailer_url,
+          type: movieData.type,
+          country: movieData.country,
+          is_watched: movieData.is_watched,
+          is_favorite: movieData.is_favorite,
+          watch_later: movieData.watch_later
+        })
         .eq('id', editingMovie.id)
-        .select();
-      
-      if (!error && data) {
-        setMovies(movies.map(m => m.id === editingMovie.id ? data[0] : m));
+        .select()
+        .single();
+
+      if (!error && updatedMovie) {
+        if (movieData.genres) {
+          await supabase.from('movie_genres').delete().eq('movie_id', editingMovie.id);
+
+          const relations = movieData.genres.map(gid => ({
+            movie_id: editingMovie.id,
+            genre_id: gid,
+          }));
+
+          await supabase.from('movie_genres').insert(relations);
+
+          const { data: genreData } = await supabase
+            .from('genres')
+            .select('id, name')
+            .in('id', movieData.genres);
+
+          if (genreData) {
+            setMovies(movies.map(m =>
+              m.id === editingMovie.id
+                ? { ...updatedMovie, genres: genreData }
+                : m
+            ));
+          }
+        } else {
+          setMovies(movies.map(m =>
+            m.id === editingMovie.id
+              ? { ...updatedMovie, genres: m.genres }
+              : m
+          ));
+        }
       }
     } else {
-      // Create new movie
-      const { data, error } = await supabase
+      const { data: newMovie, error } = await supabase
         .from('movies')
-        .insert([movieData])
-        .select();
-      
-      if (!error && data) {
-        setMovies([...movies, data[0]]);
+        .insert([{
+          title: movieData.title,
+          description: movieData.description,
+          poster_url: movieData.poster_url,
+          rating: movieData.rating,
+          release_year: movieData.release_year,
+          trailer_url: movieData.trailer_url,
+          type: movieData.type,
+          country: movieData.country,
+          is_watched: movieData.is_watched,
+          is_favorite: movieData.is_favorite,
+          watch_later: movieData.watch_later
+        }])
+        .select()
+        .single();
+
+      if (!error && newMovie && movieData.genres) {
+        const relations = movieData.genres.map(gid => ({
+          movie_id: newMovie.id,
+          genre_id: gid,
+        }));
+
+        await supabase.from('movie_genres').insert(relations);
+
+        const { data: genreData } = await supabase
+          .from('genres')
+          .select('id, name')
+          .in('id', movieData.genres);
+
+        if (genreData) {
+          setMovies([...movies, { ...newMovie, genres: genreData }]);
+        }
       }
     }
+
     setShowForm(false);
   };
 
@@ -175,10 +248,10 @@ export default function Home() {
       .from('movies')
       .update({ is_favorite: !isFavorite })
       .eq('id', id);
-    
+
     if (!error) {
-      setMovies(movies.map(movie => 
-        movie.id === id ? { ...movie, is_favorite: !isFavorite } : movie
+      setMovies(movies.map(m =>
+        m.id === id ? { ...m, is_favorite: !isFavorite } : m
       ));
     }
   };
@@ -188,10 +261,10 @@ export default function Home() {
       .from('movies')
       .update({ is_watched: !isWatched })
       .eq('id', id);
-    
+
     if (!error) {
-      setMovies(movies.map(movie => 
-        movie.id === id ? { ...movie, is_watched: !isWatched } : movie
+      setMovies(movies.map(m =>
+        m.id === id ? { ...m, is_watched: !isWatched } : m
       ));
     }
   };
@@ -201,45 +274,45 @@ export default function Home() {
       .from('movies')
       .update({ watch_later: !watchLater })
       .eq('id', id);
-    
+
     if (!error) {
-      setMovies(movies.map(movie => 
-        movie.id === id ? { ...movie, watch_later: !watchLater } : movie
+      setMovies(movies.map(m =>
+        m.id === id ? { ...m, watch_later: !watchLater } : m
       ));
     }
   };
 
-  const handleShowTrailer = (trailerUrl: string) => {
-    setSelectedTrailer(trailerUrl);
+  const handleShowTrailer = (url: string) => {
+    setSelectedTrailer(url);
   };
 
-  const getCountryCategories = () => categories.filter(cat => cat.type === 'country');
-  const getYearCategories = () => categories.filter(cat => cat.type === 'year');
-  const getGenreCategories = () => categories.filter(cat => cat.type === 'genre');
-  const getTypeCategories = () => categories.filter(cat => cat.type === 'type');
+  const getCountryCategories = () => categories.filter(c => c.type === 'country');
+  const getYearCategories = () => categories.filter(c => c.type === 'year');
+  const getTypeCategories = () => categories.filter(c => c.type === 'type');
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-dark to-gray-900 text-light">
-      <Navbar 
-        onSearch={handleSearch} 
-        onCreateMovie={handleCreateMovie} 
-      />
-      
-      <HeroSection movies={movies} onShowTrailer={handleShowTrailer} />
-      
+      <Navbar onSearch={handleSearch} onCreateMovie={handleCreateMovie} />
+
+      <HeroSection
+          movies={movies}
+          onShowTrailer={handleShowTrailer}
+         />
+
+
       <div className="container mx-auto px-4 py-8">
-        <FilterBar 
+        <FilterBar
           countryCategories={getCountryCategories()}
           yearCategories={getYearCategories()}
-          genreCategories={getGenreCategories()}
+          genreCategories={genres}
           typeCategories={getTypeCategories()}
           filters={filters}
           onFilterChange={handleFilterChange}
           onSortChange={handleSortChange}
         />
-        
-        <MovieGrid 
-          movies={filteredMovies} 
+
+        <MovieGrid
+          movies={filteredMovies}
           onEdit={handleEditMovie}
           onDelete={handleDeleteMovie}
           onToggleFavorite={handleToggleFavorite}
@@ -248,19 +321,27 @@ export default function Home() {
           onShowTrailer={handleShowTrailer}
         />
       </div>
-      
+
       {showForm && (
-        <MovieForm 
-          movie={editingMovie} 
-          onClose={() => setShowForm(false)} 
+        <MovieForm
+          movie={
+            editingMovie
+              ? {
+                  ...editingMovie,
+                  genres: editingMovie.genres.map((g) => g.id), 
+                }
+              : null
+          }
+          genres={genres}
+          onClose={() => setShowForm(false)}
           onSave={handleSaveMovie}
         />
       )}
-      
+
       {selectedTrailer && (
-        <TrailerModal 
-          trailerUrl={selectedTrailer} 
-          onClose={() => setSelectedTrailer(null)} 
+        <TrailerModal
+          trailerUrl={selectedTrailer}
+          onClose={() => setSelectedTrailer(null)}
         />
       )}
     </div>

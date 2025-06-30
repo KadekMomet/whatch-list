@@ -1,22 +1,6 @@
 import { motion } from 'framer-motion';
 import MovieCard from './MovieCard';
-
-// Tambahkan tipe Movie
-type Movie = {
-  id: string;
-  title: string;
-  description: string;
-  poster_url?: string;
-  rating: number;
-  release_year: number;
-  trailer_url?: string;
-  type: string;
-  country: string;
-  genre: string;
-  is_watched: boolean;
-  is_favorite: boolean;
-  watch_later: boolean;
-};
+import { Movie } from '@/lib/types'; 
 
 interface MovieGridProps {
   movies: Movie[];
@@ -28,9 +12,9 @@ interface MovieGridProps {
   onShowTrailer: (trailerUrl: string) => void;
 }
 
-const MovieGrid = ({ 
-  movies, 
-  onEdit, 
+const MovieGrid = ({
+  movies,
+  onEdit,
   onDelete,
   onToggleFavorite,
   onToggleWatched,
@@ -39,15 +23,20 @@ const MovieGrid = ({
 }: MovieGridProps) => {
   if (movies.length === 0) {
     return (
-      <div className="text-center py-12">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+        className="text-center py-12"
+      >
         <h3 className="text-xl text-gray-400">Tidak ada film ditemukan</h3>
         <p className="text-gray-500 mt-2">Coba ubah filter pencarian Anda</p>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <motion.div 
+    <motion.div
       layout
       className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6"
       initial={{ opacity: 0 }}
@@ -60,16 +49,23 @@ const MovieGrid = ({
           layout
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: index * 0.05 }}
+          transition={{
+            duration: 0.3,
+            delay: index * 0.05,
+            type: 'spring',
+            stiffness: 100,
+            damping: 15
+          }}
+          whileHover={{ scale: 1.03 }}
         >
-          <MovieCard 
+          <MovieCard
             movie={movie}
             onEdit={() => onEdit(movie)}
             onDelete={() => onDelete(movie.id)}
             onToggleFavorite={() => onToggleFavorite(movie.id, movie.is_favorite)}
             onToggleWatched={() => onToggleWatched(movie.id, movie.is_watched)}
             onToggleWatchLater={() => onToggleWatchLater(movie.id, movie.watch_later)}
-            onShowTrailer={() => onShowTrailer(movie.trailer_url || '')}
+            onShowTrailer={() => movie.trailer_url && onShowTrailer(movie.trailer_url)}
           />
         </motion.div>
       ))}
